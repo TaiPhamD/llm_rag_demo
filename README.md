@@ -1,7 +1,7 @@
 # Pre-requisites
 
 1. Docker setup
-1. (optional) CUDA toolkit / nvidia GPU for speed
+1. (optional) CUDA toolkit / nvidia GPU for speed. If you don't have nvidia GPU then will need to edit the provided docker-compose.yml and remove the `deploy` [section](https://github.com/TaiPhamD/llm_rag_demo/blob/cd6661f4720b3546962d93c33792ad0b43c9f20d/docker-compose.yml#L38)
 
 # How to use
 
