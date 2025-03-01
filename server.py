@@ -12,6 +12,8 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import OllamaLLM
 from langchain.chains import RetrievalQA
 
+import os
+
 app = FastAPI()
 
 # Define model name
@@ -22,7 +24,8 @@ embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-Mi
 vector_store = Chroma(persist_directory="./chroma_db", embedding_function=embedding_model)
 
 # Load Ollama LLM
-llm = OllamaLLM(model=MODEL_NAME)
+OLLAMA_API_BASE_URL = os.getenv("OLLAMA_API_BASE_URL", "http://localhost:11434")
+llm = OllamaLLM(model=MODEL_NAME, base_url=OLLAMA_API_BASE_URL)
 
 # Create retrieval-augmented generation (RAG) chain
 qa_chain = RetrievalQA.from_chain_type(
