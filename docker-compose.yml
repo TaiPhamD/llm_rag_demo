@@ -1,0 +1,30 @@
+# version: '3.8'
+# services:
+#   open-webui:
+#     image: ghcr.io/open-webui/open-webui:main
+#     container_name: open-webui-RAG
+#     ports:
+#       - "8080:8080"
+#     volumes:
+#       - open-webui-data:/app/data
+#     restart: always  # Ensures it restarts on failure
+
+# volumes:
+#   open-webui-data:
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui-RAG
+    pull_policy: always
+    ports:
+      - "8080:8080"  # 🔥 Expose Open WebUI on port 8080 instead of 3000
+    volumes:
+      - "./ollama/ollama-webui:/app/backend/data"
+    environment:
+          - OPENAI_API_BASE_URL=http://localhost:8000/v1
+    restart: always
+    network_mode: "host"
+
+# networks:
+#   rag-network:
+#     driver: bridge
