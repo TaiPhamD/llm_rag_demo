@@ -1,4 +1,5 @@
 pypdf
+pdfplumber
 chromadb
 langchain
 langchain-community
