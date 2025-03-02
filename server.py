@@ -6,7 +6,6 @@ from pydantic import BaseModel
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import ChatOllama
-# from langchain.chains import LLMChain
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from rank_bm25 import BM25Okapi
@@ -38,38 +37,43 @@ else:
     bm25_docs = [doc for doc in documents]
     tokenized_docs = [doc.page_content.split(" ") for doc in bm25_docs]
     bm25 = BM25Okapi(tokenized_docs)
+    
     with open(BM25_INDEX_PATH, "wb") as f:
         pickle.dump(bm25, f)
     with open(BM25_DOCS_PATH, "wb") as f:
         pickle.dump(bm25_docs, f)
-    print("✅ BM25 index created and saved.")
 
-# Load Ollama LLM API
-OLLAMA_API_BASE_URL = os.getenv("OLLAMA_API_BASE_URL", "http://localhost:11434")
-llm_models = {
-    model: ChatOllama(model=model, base_url=OLLAMA_API_BASE_URL)
-    for model in AVAILABLE_MODELS
-}
+    print(f"✅ BM25 index created with {len(bm25_docs)} documents.")
 
-def hybrid_search(query, top_k=3):
-    retriever = vector_store.as_retriever(search_type="mmr", search_kwargs={"k": top_k})
-    chroma_results = retriever.get_relevant_documents(query)
-    bm25_results = []
+def hybrid_search(query, top_k=5):
+    """Hybrid search using ChromaDB & BM25."""
     
+    # ChromaDB retrieval (using similarity instead of mmr)
+    retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": top_k})
+    chroma_results = retriever.get_relevant_documents(query)
+
+    # BM25 retrieval
+    bm25_results = []
     if bm25:
         tokenized_query = query.split(" ")
         bm25_scores = bm25.get_scores(tokenized_query)
         top_bm25_indices = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)[:top_k]
         bm25_results = [bm25_docs[i] for i in top_bm25_indices]
 
-    combined_results = list({doc.page_content: doc for doc in chroma_results + bm25_results}.values())
+    # Merge results while keeping unique documents
+    merged_results = {}
+    for doc in chroma_results + bm25_results:
+        key = f"{doc.metadata.get('section', 'N/A')}-{doc.metadata.get('page', 'Unknown')}"
+        merged_results[key] = doc  # Overwrite duplicates
 
-    # Debugging output to verify retrieved documents
-    print(f"🔍 Retrieved Documents:\n{[doc.page_content[:200] for doc in combined_results]}")
+    final_results = list(merged_results.values())[:top_k]
 
-    return combined_results
+    print(f"🔍 Retrieved {len(final_results)} documents:")
+    for doc in final_results:
+        print(f"📄 Section: {doc.metadata.get('section', 'N/A')} - Title: {doc.metadata.get('title', 'Untitled')}\n{doc.page_content[:200]}...\n")
 
-total_sources = 2
+    return final_results
+
 # OpenAI-compatible request format
 class ChatRequest(BaseModel):
     model: str
@@ -84,50 +88,44 @@ def chat(request: ChatRequest):
     query = request.messages[-1]["content"]
 
     # Retrieve relevant documents
-    relevant_docs = hybrid_search(query, top_k=total_sources)
+    relevant_docs = hybrid_search(query, top_k=5)
 
     # Construct context for the LLM
     context = "\n\n".join([
-        f"**Section {doc.metadata.get('section', 'N/A')}** - {doc.metadata.get('title', 'Untitled')}\n{doc.page_content}"
+        f"**Section {doc.metadata.get('section', 'N/A')}** - {doc.metadata.get('title', 'Untitled')}\n{doc.page_content[:1000]}"
         for doc in relevant_docs
     ])
 
-    # **Using AIMessage & HumanMessage Format**
+    # Debugging LLM input
+    print(f"🔍 Context for LLM:\n{context[:2000]}...\n")
+
+    # Format messages for LLM
     messages = [
         SystemMessage(
-            content="""
-            You are a helpful assistant specializing in answering Home Owner Associlation rules. Respond in full sentences using natural language.
-            Answer questions **ONLY** based on the provided HOA rules below.
-            If a rule explicitly answers the question, state it **directly** with the rule number.
-            If there is **no relevant rule**, say "There is no HOA rule covering this topic."
+            content=f"""
+            You are a helpful assistant specializing in answering Homeowner Association rules. 
+            Answer questions **ONLY** based on the HOA rules below.
             
             📜 **HOA Rules for Reference:**
-            """ + context
+            {context}
+            """
         ),
         HumanMessage(content=query)
     ]
 
-    # **Initialize ChatOllama and invoke with messages**
-    llm = ChatOllama(model=request.model, base_url=OLLAMA_API_BASE_URL)
+    # Initialize ChatOllama and invoke
+    llm = ChatOllama(model=request.model, base_url=os.getenv("OLLAMA_API_BASE_URL", "http://localhost:11434"))
     response = llm.invoke(messages)
 
-    # Debugging: Print raw response
+    # Debugging LLM response
     print(f"🔍 Raw LLM Response: {response}")
 
-    # **Handle structured response properly**
-    if isinstance(response, AIMessage):
-        llm_response = response.content  # Extract the actual AI-generated text
-    elif isinstance(response, str):
-        llm_response = response
-    elif isinstance(response, dict):
-        llm_response = response.get("content", "⚠️ No valid response received from LLM.")
-    else:
-        llm_response = "⚠️ Unexpected response format."
+    # Handle structured response
+    llm_response = response.content if isinstance(response, AIMessage) else response
 
     # Format sources
     sources = []
     formatted_sources = []
-
     for i, doc in enumerate(relevant_docs, 1):
         source_name = doc.metadata.get("source", "Unknown")
         page_number = doc.metadata.get("page", "Unknown")
@@ -160,7 +158,6 @@ def chat(request: ChatRequest):
         },
         "source_documents": sources
     }
-
 
 @app.get("/v1/models")
 def list_models():

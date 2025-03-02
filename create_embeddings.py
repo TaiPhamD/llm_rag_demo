@@ -170,7 +170,7 @@ def main():
     print(f"✅ Extracted {len(toc_map)} TOC entries.")
 
     print("📑 Extracting structured rules using pdfplumber...")
-    structured_rules = extract_rules_with_pdfplumber(pdf_path, toc_map)
+    structured_rules = extract_rules_with_pdfplumber(pdf_path, toc_map, chunk_size=250)
 
     if not structured_rules:
         print("❌ No structured rules found. Exiting.")
