@@ -109,9 +109,10 @@ def main():
         Document(page_content=rule["content"], metadata={"section": rule["section"], "title": rule["title"]})
         for rule in structured_rules
     ]
+    embedding_model_name = "sentence-transformers/all-mpnet-base-v2"
 
-    print("🔍 Creating embeddings using Legal-BERT...")
-    embedding_model = HuggingFaceEmbeddings(model_name="nlpaueb/legal-bert-base-uncased")
+    print(f"🔍 Creating embeddings using {embedding_model_name}...")
+    embedding_model = HuggingFaceEmbeddings(model_name=embedding_model_name)
 
     print(f"💾 Saving embeddings to {persist_directory} ...")
     with tqdm(total=len(chroma_documents), desc="Embedding progress", unit="doc") as pbar:

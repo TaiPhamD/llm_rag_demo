@@ -22,7 +22,8 @@ app = FastAPI()
 MODEL_NAME = "initium/law_model"
 
 # Load embedding model (Ensure it matches the ChromaDB embeddings)
-embedding_model = HuggingFaceEmbeddings(model_name="nlpaueb/legal-bert-base-uncased")
+embedding_model_name = "sentence-transformers/all-mpnet-base-v2"
+embedding_model = HuggingFaceEmbeddings(model_name=embedding_model_name)
 
 # Load ChromaDB vector store
 vector_store = Chroma(persist_directory="./chroma_db", embedding_function=embedding_model)
@@ -63,7 +64,7 @@ OLLAMA_API_BASE_URL = os.getenv("OLLAMA_API_BASE_URL", "http://localhost:11434")
 llm = OllamaLLM(model=MODEL_NAME, base_url=OLLAMA_API_BASE_URL)
 
 # Define Hybrid Search Function
-def hybrid_search(query, top_k=5):
+def hybrid_search(query, top_k=10):
     """
     Performs hybrid search using BM25 for keyword matching and Chroma for semantic search.
     Returns a ranked list of documents based on both methods.
@@ -96,7 +97,7 @@ def hybrid_search(query, top_k=5):
 def get_qa_chain():
     return RetrievalQA.from_chain_type(
         llm=llm,
-        retriever=vector_store.as_retriever(search_kwargs={"k": 3}),
+        retriever=vector_store.as_retriever(search_kwargs={"k": 5}),
         return_source_documents=True
     )
 
