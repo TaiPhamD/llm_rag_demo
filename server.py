@@ -96,7 +96,7 @@ def hybrid_search(query, top_k=10):
 def get_qa_chain():
     return RetrievalQA.from_chain_type(
         llm=llm,
-        retriever=vector_store.as_retriever(search_kwargs={"k": 3}),
+        retriever=vector_store.as_retriever(search_kwargs={"k": 5}),
         return_source_documents=True
     )
 
