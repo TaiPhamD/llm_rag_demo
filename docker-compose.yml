@@ -23,8 +23,6 @@ services:
       context: .
       dockerfile: Dockerfile.rag_api
     container_name: rag-api
-    ports:
-      - "8000:8000"
     restart: unless-stopped
     depends_on:
       ollama:

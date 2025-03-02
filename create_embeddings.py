@@ -13,6 +13,8 @@ from langchain.schema import Document
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 
+embedding_model_name = "sentence-transformers/all-mpnet-base-v2"
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Process a PDF and create embeddings using ChromaDB.")
     parser.add_argument("pdf_path", type=str, help="Path to the input PDF file.")
@@ -20,8 +22,8 @@ def parse_args():
     return parser.parse_args()
 
 def load_embedding_model():
-    """Loads Legal-BERT model and falls back to InLegalBERT if unavailable."""
-    model_name = "nlpaueb/legal-bert-base-uncased"
+    """Loads sentence-transformers/all-mpnet-base-v2 model and falls back to InLegalBERT if unavailable."""
+    model_name = embedding_model_name
     try:
         model = SentenceTransformer(model_name)
         print(f"✅ Using embedding model: {model_name}")
@@ -164,7 +166,7 @@ def main():
         print("❌ No valid documents to embed. Exiting.")
         return
 
-    print("🔍 Creating embeddings using Legal-BERT...")
+    print(f"🔍 Creating embeddings using {embedding_model_name}")
     embedding_model = load_embedding_model()
 
     print(f"💾 Saving embeddings to {persist_directory} ...")
