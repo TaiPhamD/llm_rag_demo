@@ -69,10 +69,29 @@ def extract_toc_from_pdf(pdf_path):
     return toc_map
 
 
-def extract_rules_with_pdfplumber(pdf_path, toc_map):
+def chunk_text(text, chunk_size=200, overlap=50):
+    """
+    Splits text into chunks of approximately `chunk_size` words with `overlap` words for context retention.
+    """
+    words = text.split()
+    chunks = []
+    
+    if len(words) <= chunk_size:
+        return [text]  # If the text is short, return as a single chunk
+    
+    start = 0
+    while start < len(words):
+        end = min(start + chunk_size, len(words))
+        chunks.append(" ".join(words[start:end]))
+        start += chunk_size - overlap  # Move forward with overlap
+
+    return chunks
+
+
+def extract_rules_with_pdfplumber(pdf_path, toc_map, chunk_size=200, overlap=50):
     """
     Extracts structured HOA rules directly from the PDF using pdfplumber.
-    Returns a list of dictionaries with section number, title, content, and page number.
+    Uses adaptive chunking for better retrieval.
     """
     sections = []
     current_section = None
@@ -80,7 +99,7 @@ def extract_rules_with_pdfplumber(pdf_path, toc_map):
     section_text = []
     current_page = None
 
-    # Improved regex for detecting sections
+    # Regex for section detection
     section_pattern = re.compile(r"^(ARTICLE\s+\d+|\d+\.\d+)\s+([A-Za-z].*?)$")
 
     with pdfplumber.open(pdf_path) as pdf:
@@ -100,14 +119,19 @@ def extract_rules_with_pdfplumber(pdf_path, toc_map):
                 if match:
                     section_number, section_title = match.groups()
 
-                    # Save previous section before starting a new one
-                    if current_section:
-                        sections.append({
-                            "section": current_section,
-                            "title": toc_map.get(current_section, {}).get("title", current_title),
-                            "content": " ".join(section_text).strip(),
-                            "page": current_page
-                        })
+                    # Save previous section with chunking
+                    if current_section and section_text:
+                        full_text = " ".join(section_text).strip()
+                        chunked_texts = chunk_text(full_text, chunk_size, overlap)
+
+                        for chunk in chunked_texts:
+                            sections.append({
+                                "section": current_section,
+                                "title": toc_map.get(current_section, {}).get("title", current_title),
+                                "content": chunk,
+                                "page": current_page
+                            })
+
                         section_text = []
 
                     # Start a new section
@@ -117,14 +141,18 @@ def extract_rules_with_pdfplumber(pdf_path, toc_map):
 
                 section_text.append(line)
 
-    # Save the last section
-    if current_section:
-        sections.append({
-            "section": current_section,
-            "title": toc_map.get(current_section, {}).get("title", current_title),
-            "content": " ".join(section_text).strip(),
-            "page": current_page
-        })
+    # Save the last section with chunking
+    if current_section and section_text:
+        full_text = " ".join(section_text).strip()
+        chunked_texts = chunk_text(full_text, chunk_size, overlap)
+
+        for chunk in chunked_texts:
+            sections.append({
+                "section": current_section,
+                "title": toc_map.get(current_section, {}).get("title", current_title),
+                "content": chunk,
+                "page": current_page
+            })
 
     return sections
 
