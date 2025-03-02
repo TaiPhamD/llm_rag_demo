@@ -64,8 +64,8 @@ services:
         echo "Waiting 10 seconds for Ollama to be ready..."
         sleep 10
 
-        echo "Pulling Llama3.2 model..."
-        if ! ollama pull llama3.2; then
+        echo "Pulling initium/law_model..."
+        if ! ollama pull initium/law_model; then
           echo "❌ ERROR: Failed to pull Llama3 model. Exiting."
           exit 1  # 🔥 Fail the container if model pull fails
         fi

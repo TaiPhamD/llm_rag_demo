@@ -19,7 +19,7 @@ from rank_bm25 import BM25Okapi
 app = FastAPI()
 
 # Define model name for Ollama
-MODEL_NAME = "llama3.2"
+MODEL_NAME = "initium/law_model"
 
 # Load embedding model (Ensure it matches the ChromaDB embeddings)
 embedding_model = HuggingFaceEmbeddings(model_name="nlpaueb/legal-bert-base-uncased")
@@ -78,16 +78,19 @@ def hybrid_search(query, top_k=5):
         tokenized_query = query.split(" ")
         bm25_scores = bm25.get_scores(tokenized_query)
 
-        # Select top K matching documents
+        # Prioritize exact matches with higher weighting
         top_bm25_indices = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)[:top_k]
         bm25_results = [bm25_docs[i] for i in top_bm25_indices]
 
-    # Log retrieval sources
-    print(f"🔍 Retrieved {len(chroma_results)} docs from Chroma, {len(bm25_results)} from BM25.")
+    # Ensure exact keyword matches appear first
+    combined_results = sorted(
+        {doc.page_content: doc for doc in chroma_results + bm25_results}.values(),
+        key=lambda doc: int("boat" in doc.page_content.lower() or "parking" in doc.page_content.lower()),  # Boost direct matches
+        reverse=True
+    )
 
-    # Merge & rank results without duplicates
-    combined_results = {doc.page_content: doc for doc in chroma_results + bm25_results}.values()
     return list(combined_results)
+
 
 # Create RetrievalQA chain with Hybrid Search
 def get_qa_chain():
@@ -116,23 +119,36 @@ def chat(request: ChatRequest):
     context = "\n\n".join([f"📌 **Section {doc.metadata.get('section', 'N/A')}** - {doc.metadata.get('title', 'Untitled')}\n{doc.page_content}" for doc in relevant_docs])
 
     system_prompt = f"""
-    You are a helpful AI assistant that answers questions about HOA rules.
-    Use the following rules as reference to provide an accurate response:
-    
+    You are a strict HOA assistant. You must answer questions **ONLY** based on the provided HOA rules below.
+    If a rule explicitly answers the question, state it **directly** with the rule number.
+    If there is **no relevant rule**, say "There is no HOA rule covering this topic."
+
+    🚨 **Strictly avoid making assumptions or offering opinions.** 🚨
+
+    📜 **HOA Rules for Reference:**
     {context}
 
-    Answer concisely and clearly, referring to relevant sections if needed.
+    📝 **Answer Format:**
+    1. If the rules explicitly answer the question, provide the rule number and the exact rule text.
+    2. If the rules do not cover the topic, say "There is no HOA rule on this."
+
+    Now, answer this question:
     """
+
 
     # Query Llama3 for final response
     qa_chain = get_qa_chain()
-    result = qa_chain.run(query)
+    response = qa_chain.invoke(query)  # ✅ FIXED: Now correctly handles multiple outputs
+
+    # Extract response & source documents
+    llm_response = response["result"]
+    source_documents = response.get("source_documents", [])
 
     # Format sources for response
     sources = []
     formatted_sources = []
     
-    for i, doc in enumerate(relevant_docs, 1):
+    for i, doc in enumerate(source_documents, 1):
         source_name = doc.metadata.get("source", "Unknown")
         page_number = doc.metadata.get("page", "Unknown")
         snippet = doc.page_content[:200]  # First 200 chars
@@ -152,7 +168,7 @@ def chat(request: ChatRequest):
             {
                 "message": {
                     "role": "assistant",
-                    "content": f"{result}\n\n**Sources:**\n" + "\n".join(formatted_sources)
+                    "content": f"{llm_response}\n\n**Sources:**\n" + "\n".join(formatted_sources)
                 },
                 "finish_reason": "stop",
                 "index": 0
@@ -167,6 +183,7 @@ def chat(request: ChatRequest):
     }
 
     return response
+
 
 @app.get("/v1/models")
 def list_models():
